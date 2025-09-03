@@ -1,48 +1,61 @@
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def singlePort():
-    selectedPort = int(input("which port would you like closed?"))
+MAX_IP_WORKERS = 200
+MAX_PORT_WORKERS = 1000
+
+#def singlePort():
+#    selectedPort = int(input("which port would you like closed?"))
     
 
-def closePort():
-    print("placeholder")
+#def closePort():
+#    print("placeholder")
 
 
-def ip_split():
+def id_subnet():
     local_host = socket.gethostname()
     host_ip = socket.gethostbyname(local_host)
     ip_raw = host_ip.split('.')
-    s = 0
-    while s != 255:
-        for f in range(255):
-            if f == 255:
-                f = 0
-                s =+ 1
-            f+=1
-            subnet_raw = ip_raw[0], ip_raw[1], str(s), str(f)
-            subnet = ".".join(subnet_raw)
-            print(subnet)
+    if len(ip_raw) != 4 or (ip_raw[0] not in ['10', '172', '192'] and ip_raw[0] != '127'):
+        print("Somethings wrong with your ip dawg")
+        return
+    print(f"Scanning subnet, {ip_raw[0]}.{ip_raw[1]}.0.0")
+    with ThreadPoolExecutor(max_workers=MAX_IP_WORKERS) as ip_executor:    
+        for s in range(256):
+            for f in range(256):
+                target_ip = f"{ip_raw[0]}.{ip_raw[1]}.{s}.{f}"
+                ip_executor.submit(scan_host, target_ip)
+                
+def scan_host(host):
+    with ThreadPoolExecutor(max_workers=MAX_PORT_WORKERS) as port_executor:
+        future_to_port = {
+            port_executor.submit(scan_port, host, port): port
+            for port in range(1, 65536)
+        }
+        for future in as_complete(future_to_port):
+            pass
 
-def id_port():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)    
-    target_host = socket.gethostname()
+def scan_port(host, port):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.1)
+        try:
+            s.connect((host, port))
+            print(f"{host}:{port} is open")
+            return True
+        except (socket.timeout, ConnectionRefusedError):
+            pass
+        finally:
+            s.close()
 
-    s.bind((socket.gethostname(), port_sel))
-    s.listen(5)
-
-def funcSel(sel):
-    if sel == 2:
-        ip_split()
-    if sel == 1:
-        print("Placeholder")
+#def funcSel(sel):
+#    if sel == 2:
+#        ip_split()
+#    if sel == 1:
+#        print("Placeholder")
 
 
 def main():
-    #welcome_msg = print("Hello, Welcome to GiusMap! Select whatever you want and have fun but not too much fun ;)")
-    #sel = input("1) Scan whole network on specific port\n2) Scan whole network on all ports (why would you do this(RECOURSE INTENSIVE!!!))\n3)")
-    #funcSel(sel)
-    #id_port()
-    ip_split()
+    id_subnet()
 
 if __name__ == "__main__":
     main()

@@ -1,18 +1,16 @@
+#!/usr/bin/env python3
+
+
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import argparse
 
-MAX_IP_WORKERS = 200
-MAX_PORT_WORKERS = 1000
+MAX_IP_WORKERS = 500
+MAX_PORT_WORKERS = 2000
 
-#def singlePort():
-#    selectedPort = int(input("which port would you like closed?"))
-    
-
-#def closePort():
-#    print("placeholder")
-
-
-def id_subnet():
+#This function identifies the subnet, and returns in case the starting subnet header is not valid.
+#This also passes the target IP's throughout the code
+def all_subnets():
     local_host = socket.gethostname()
     host_ip = socket.gethostbyname(local_host)
     ip_raw = host_ip.split('.')
@@ -26,15 +24,17 @@ def id_subnet():
                 target_ip = f"{ip_raw[0]}.{ip_raw[1]}.{s}.{f}"
                 ip_executor.submit(scan_host, target_ip)
                 
-def scan_host(host):
+#Using multithreading, this passes the target IP and scans all ports possible
+def scan_host(host, start_port=1, end_port=65535):
     with ThreadPoolExecutor(max_workers=MAX_PORT_WORKERS) as port_executor:
         future_to_port = {
             port_executor.submit(scan_port, host, port): port
-            for port in range(1, 65536)
+            for port in range(start_port, end_port + 1)
         }
-        for future in as_complete(future_to_port):
+        for future in as_completed(future_to_port):
             pass
-
+        
+#scans and reports if port is open or closed
 def scan_port(host, port):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
@@ -43,19 +43,36 @@ def scan_port(host, port):
             print(f"{host}:{port} is open")
             return True
         except (socket.timeout, ConnectionRefusedError):
-            pass
+            print(f"{host}:{port} is DOWN")
         finally:
             s.close()
 
-#def funcSel(sel):
-#    if sel == 2:
-#        ip_split()
-#    if sel == 1:
-#        print("Placeholder")
-
-
 def main():
-    id_subnet()
-
+    parser = argparse.ArgumentParser(description="A multithreaded port scanner.")
+    parser.add_argument("-i","--ip", help="The IP address to scan.")
+    parser.add_argument("-p", "--ports", default="1-65535", help="Port range to scan (e.g., 1-1024 or 80,443). Keep blank for all ports")
+    args = parser.parse_args()
+    
+    if args.ip:
+        ip_list = [ip.strip() for ip in args.ip.split(',')]
+        # User wants to scan specific IP(s)
+        if ',' in args.ports:
+            ports = [int(p.strip()) for p in args.ports.split(',')]
+            for ip in ip_list:
+                for port in ports:
+                    scan_port(ip, port)
+        elif '-' in args.ports:
+            start_port, end_port = map(int, args.ports.split('-'))
+            for ip in ip_list:
+                scan_host(ip, start_port, end_port)
+        else:
+            port = int(args.ports)
+            for ip in ip_list:
+                scan_port(ip, port)
+    else:
+        # No IP was provided, so scan the entire local subnet
+        print("No IP address provided. Scanning the entire local subnet...")
+        all_subnets()
+        
 if __name__ == "__main__":
     main()
